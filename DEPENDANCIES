@@ -1,0 +1,15 @@
+DEPENDANCIES
+
+Diesel
+SQLite (à installer)
+Cargo
+
+COMMANDES :
+
+Cargo run (pour lancer la compilation du code main.rs)
+diesel migration run (pour lancer la création des migrations car utilisation d'un ORM -- diesel)
+diesel setup (poiur construire la bdd automatiquement)
+
+Il faut créer un fichier .env et y mettre la variable URL_DATABSE = NomDB
+
+
