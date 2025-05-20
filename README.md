@@ -1,7 +1,17 @@
 # SQL_INJ-RUST
+The purpose of this project is to ***steal informations on OUR OWN web application using our own SQLi tool***.
 
-Création d'un site web peu sécurisé volontairement (requêtes SQL non préparées, mots de passes non hashés etc.) afin de pouvoir tester notre futur outil d'automatisation d'injections SQL en RUST.
+Firstable, we had to create our website. 
+We choose to create a small social network which allows users to post statuses and see other people statuses.
 
-Nous utilisons le framework Actix Web pour faciliter la conception de notre site web (L'outil d'injections SQL sera développé uniquement en Rust).
-Nous utilisons Cargo comme système de compilation rust.
-Nous utilisons Diesel comme ORM.
+We used a rust based framework called Actix Web, a compilation system called Cargo and an ORM called Diesel.
+These 3 tools allow us to develop a little web application very quickly.
+
+Once done, we had to develop our tool using Rust. Its a small program which test few SQL injections on the website and extract informations. 
+This tool also create a pdf that contains all infos.
+
+We can go further and add a script which exploits XSS vulnerabilities. 
+
+Let's see...
+
+
