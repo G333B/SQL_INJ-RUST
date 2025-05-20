@@ -7,7 +7,7 @@ We choose to create a small social network which allows users to post statuses a
 We used a rust based framework called Actix Web, a compilation system called Cargo and an ORM called Diesel.
 These 3 tools allow us to develop a little web application very quickly.
 
-Once done, we had to develop our tool using Rust. Its a small program which test few SQL injections on the website and extract informations. 
+Once done, we had to develop our tool using Rust. Its a small program which tests few SQL injections on the website and extract informations. 
 This tool also create a pdf that contains all infos.
 
 We can go further and add a script which exploits XSS vulnerabilities. 
