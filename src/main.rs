@@ -3,7 +3,7 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::RunQueryDsl;
 use diesel::Insertable;
-use serde::Deserialize;
+//use serde::{Deserialize, Serialize};
 use dotenvy::dotenv;
 use std::env;
 
@@ -66,22 +66,22 @@ fn create_user(conn: &mut SqliteConnection, new_user: &NewUser) -> QueryResult<u
         .execute(conn)
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct AuthData {
     username: String,
     password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct StatusData {
     content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct DeleteData {
     status_id: i32,
 }
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct ProfileQuery {
     user_id: i32,
     deleted: Option<i32>,
@@ -96,7 +96,7 @@ struct UsernameResult  {
     username: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 struct UserIdQuery {
     user_id: i32,
 }
@@ -127,7 +127,7 @@ pub struct Info {
     pub dog_name: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct InfoForm {
     full_name: Option<String>,
     address: Option<String>,
@@ -163,12 +163,11 @@ async fn register_process(form: web::Form<AuthData>) -> impl Responder {
     let conn = &mut establish_connection();
     let new_user = NewUser {
         username: &form.username,
-        password: &form.password, // ⚠️ Stored in plain text — consider hashing!
+        password: &form.password, // pas hashé exprès
     };
 
     match create_user(conn, &new_user) {
         Ok(_) => {
-            // Redirect to login page after successful registration
             HttpResponse::SeeOther()
                 .insert_header((header::LOCATION, "/login"))
                 .finish()
@@ -334,8 +333,8 @@ async fn show_register_form() -> impl Responder {
 
 async fn profile_page(query: web::Query<ProfileQuery>) -> impl Responder {
     let conn = &mut establish_connection();
+// afficher nom utilisateur 
 
-    // Trouve le nom d'utilisateur pour afficher "Welcome, XXX"
     let username = diesel::sql_query(format!(
         "SELECT username FROM users WHERE id = {}",
         query.user_id
@@ -473,7 +472,7 @@ let html = format!(r#"
 
 
 async fn post_status(form: web::Form<StatusData>, query: web::Query<UserIdQuery>) -> impl Responder {
-    println!("post_status() triggered with content: {}", form.content); // <-- Confirm it runs
+    println!("post_status() triggered with content: {}", form.content); 
 
     let conn = &mut establish_connection();
     let user_id = query.user_id;
@@ -502,7 +501,6 @@ async fn post_status(form: web::Form<StatusData>, query: web::Query<UserIdQuery>
 async fn delete_status(form: web::Form<DeleteData>, query: web::Query<UserIdQuery>) -> impl Responder {
     let conn = &mut establish_connection();
 
-    // Verify that this user owns the status before deletion
     let _ = diesel::sql_query(format!(
         "DELETE FROM statuses WHERE id = {} AND user_id = {}",
         form.status_id, query.user_id
@@ -720,4 +718,173 @@ async fn main() -> std::io::Result<()> {
     .bind("127.0.0.1:8080")?
     .run()
     .await
+}
+
+// TESTS UNITAIRES
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel::connection::SimpleConnection;
+    // La ligne suivante peut être commentée ou supprimée car MigrationConnection n'est pas utilisée directement
+    // use diesel::migration::MigrationConnection;
+    use diesel::RunQueryDsl;
+    use diesel::sql_query;
+    use crate::schema::{users, statuses};
+
+    use actix_web::{test, web, App};
+    use actix_web::http::header;
+    use actix_web::http::StatusCode; // Gardé car utilisé dans les tests restants
+
+    // Une fonction utilitaire pour établir une connexion de test en mémoire
+    fn establish_test_connection() -> SqliteConnection {
+        let mut conn = SqliteConnection::establish(":memory:")
+            .expect("Error connecting to in-memory database");
+
+        // Appliquez le schéma à la base de données en mémoire.
+        conn.batch_execute(
+            "CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL
+            );
+            CREATE TABLE statuses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE infos (
+                user_id INTEGER PRIMARY KEY,
+                full_name TEXT,
+                address TEXT,
+                age INTEGER,
+                country TEXT,
+                dog_name TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            "
+        ).unwrap();
+        conn
+    }
+
+    // Un wrap pour la fonction create_user qui utilise la connexion de test
+    fn create_test_user(conn: &mut SqliteConnection, username: &str, password: &str) -> QueryResult<usize> {
+        let new_user = NewUser { username, password };
+        create_user(conn, &new_user)
+    }
+
+    #[actix_web::test]
+    async fn test_main_connection_successful() {
+        // Ce test vérifiera votre connexion normale (via .env)
+        let result = std::panic::catch_unwind(|| {
+            establish_connection();
+        });
+        assert!(result.is_ok(), "Failed to establish connection to database, check your DATABASE_URL in .env");
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_successful() {
+        let mut conn = establish_test_connection();
+        let result = create_test_user(&mut conn, "testuser", "testpassword");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // 1 ligne insérée
+
+        let user_count: i64 = users::table
+            .count()
+            .get_result(&mut conn)
+            .expect("Error loading user count");
+        assert_eq!(user_count, 1);
+    }
+
+    #[actix_web::test]
+    async fn test_create_user_duplicate_fails() {
+        let mut conn = establish_test_connection();
+        create_test_user(&mut conn, "testuser", "testpassword").unwrap();
+
+        let result = create_test_user(&mut conn, "testuser", "anotherpassword");
+        assert!(result.is_err()); 
+    }
+
+
+
+
+
+    #[actix_web::test]
+    async fn test_login_process_failure_invalid_credentials() {
+        // Crée une instance de l'application pour le test
+        let app = test::init_service(App::new().route("/login", web::post().to(login_process))).await;
+
+        let req = test::TestRequest::post()
+            .uri("/login")
+            .set_form(&AuthData {
+                username: "nonexistent".to_string(),
+                password: "wrongpassword".to_string(),
+            })
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED); // Code 401
+    }
+
+    #[actix_web::test]
+    async fn test_delete_status_success() {
+        let mut conn = establish_test_connection();
+        create_test_user(&mut conn, "deleteuser", "deletepassword").unwrap();
+        let user_id_row: UserIdRow = sql_query("SELECT id FROM users WHERE username = 'deleteuser'")
+            .load::<UserIdRow>(&mut conn)
+            .unwrap()
+            .pop()
+            .unwrap();
+        let user_id = user_id_row.id;
+
+        // Insérer un statut à supprimer (sans .to_string() car content est &str)
+        let new_status = NewStatus {
+            user_id,
+            content: "This status will be deleted.",
+        };
+        diesel::insert_into(statuses::table)
+            .values(&new_status)
+            .execute(&mut conn)
+            .unwrap();
+
+        let status_id_row: UserIdRow = sql_query(format!("SELECT id FROM statuses WHERE user_id = {}", user_id))
+            .load::<UserIdRow>(&mut conn)
+            .unwrap()
+            .pop()
+            .unwrap();
+        let status_id = status_id_row.id;
+
+        // Crée une instance de l'application pour le test
+        let app = test::init_service(App::new().route("/delete_status", web::post().to(delete_status))).await;
+
+        let req = test::TestRequest::post()
+            .uri(format!("/delete_status?user_id={}", user_id).as_str())
+            .set_form(&DeleteData { status_id })
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER); // Code 303
+        let location = resp.headers().get(header::LOCATION).unwrap().to_str().unwrap();
+        assert_eq!(location, format!("/profile?user_id={}&deleted=1", user_id));
+
+        // Vérifiez que le statut a été supprimé
+        let mut check_conn = establish_test_connection();
+        let status_count: i64 = statuses::table
+            .count()
+            .get_result(&mut check_conn)
+            .expect("Error loading status count");
+        assert_eq!(status_count, 0);
+    }
+
+    #[actix_web::test]
+    async fn test_logout_redirects() {
+        // Crée une instance de l'application pour le test
+        let app = test::init_service(App::new().route("/logout", web::get().to(logout))).await;
+        let req = test::TestRequest::get().uri("/logout").to_request();
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER); // Code 303
+        assert_eq!(resp.headers().get(header::LOCATION).unwrap(), "/login");
+    }
 }

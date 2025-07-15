@@ -1,0 +1,1 @@
+$env:RUSTFLAGS="-L C:\sqlite-dll-win-x64-3500200"
