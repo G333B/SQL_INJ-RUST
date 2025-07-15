@@ -12,6 +12,8 @@ This tool also create a pdf that contains all infos.
 
 We can go further and add a script which exploits XSS vulnerabilities. 
 
-Let's see...
+
+Meguedad Johanna
+Languedoc Clement
 
 
